@@ -31,9 +31,44 @@ initDir() {
     install -d ${mode:+--mode="$mode"} ${user:+--owner "$user"} ${group:+--group "$group"} "${1?}"
 }
 
+atomicDir() {
+    local dir="$1"
+    shift
+
+    local cmd="$1"
+    shift
+
+    local parent
+    parent="$(dirname "$dir")"
+
+    if ! [[ -d "$parent" ]]; then
+        initDir "$parent"
+    fi
+
+    # Create temporary directory in the parent directory of the target/final
+    # directory; this helps ensure the final `mv -f` is an atomic rename (and
+    # not, e.g., a cross-device copy).
+    tmp="$(mktemp -d "${parent}/.$(basename "$dir").XXXXXXXXXX")"
+
+    "$cmd" "$tmp" "$@" || {
+        local rc="$?"
+        rm -rf "${tmp?}"
+        return "$rc"
+    }
+
+    # `-T` (`--no-target-directory`) to avoid copying `$tmp` into `$dir`,
+    # should `$dir` have been created by something other than this run of this
+    # function.
+    mv -T -f "$tmp" "$dir"
+}
+
 permsFromReference() {
     chown --reference="${2?}" "${1?}"
     chmod --reference="${2?}" "${1?}"
+}
+
+atomicDirFromReference() {
+    atomicDir "${1?}" permsFromReference "${2?}"
 }
 
 # Get inputs from command line arguments
@@ -84,13 +119,17 @@ for pathPart in $target; do
     if [[ ! -d "$currentSourcePath" ]]; then
         initDir "$currentSourcePath"
     fi
-    [[ -d "$currentTargetPath" ]] || mkdir "$currentTargetPath"
 
     # resolve the source path to avoid symlinks
     currentRealSourcePath="$(realpath -m "$currentSourcePath")"
 
-    # synchronize perms between source and target
-    permsFromReference "$currentTargetPath" "$currentRealSourcePath"
+    if [[ -d "$currentTargetPath" ]]; then
+        # synchronize perms between source and target
+        permsFromReference "$currentTargetPath" "$currentRealSourcePath"
+    else
+        # create target directory with perms from source
+        atomicDirFromReference "$currentTargetPath" "$currentRealSourcePath"
+    fi
 
     # lastly we update the previousPath to continue down the tree
     previousPath="$currentTargetPath"
