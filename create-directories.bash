@@ -27,6 +27,10 @@ trap 'echo Error when executing ${BASH_COMMAND} at line ${LINENO}! >&2' ERR
 #   2. Copy the ownership of the source path to the target path
 #   3. Copy the mode of the source path to the target path
 
+initDir() {
+    install -d ${mode:+--mode="$mode"} ${user:+--owner "$user"} ${group:+--group "$group"} "${1?}"
+}
+
 # Get inputs from command line arguments
 if [[ "$#" != 6 ]]; then
     printf "Error: 'create-directories.bash' requires *six* args.\n" >&2
@@ -73,8 +77,7 @@ for pathPart in $target; do
 
     # create the source and target directories if they don't exist
     if [[ ! -d "$currentSourcePath" ]]; then
-        mkdir --mode="$mode" "$currentSourcePath"
-        chown "$user:$group" "$currentSourcePath"
+        initDir "$currentSourcePath"
     fi
     [[ -d "$currentTargetPath" ]] || mkdir "$currentTargetPath"
 
