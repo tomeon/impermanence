@@ -17,6 +17,7 @@
           };
       in
       {
+        x86_64-linux.nixos = importCheck ./tests/nixos.nix;
         x86_64-linux.modules = importCheck ./tests/modules.nix;
       };
   };
