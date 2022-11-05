@@ -31,6 +31,11 @@ initDir() {
     install -d ${mode:+--mode="$mode"} ${user:+--owner "$user"} ${group:+--group "$group"} "${1?}"
 }
 
+permsFromReference() {
+    chown --reference="${2?}" "${1?}"
+    chmod --reference="${2?}" "${1?}"
+}
+
 # Get inputs from command line arguments
 if [[ "$#" != 6 ]]; then
     printf "Error: 'create-directories.bash' requires *six* args.\n" >&2
@@ -85,8 +90,7 @@ for pathPart in $target; do
     currentRealSourcePath="$(realpath -m "$currentSourcePath")"
 
     # synchronize perms between source and target
-    chown --reference="$currentRealSourcePath" "$currentTargetPath"
-    chmod --reference="$currentRealSourcePath" "$currentTargetPath"
+    permsFromReference "$currentTargetPath" "$currentRealSourcePath"
 
     # lastly we update the previousPath to continue down the tree
     previousPath="$currentTargetPath"
