@@ -11,6 +11,22 @@ let
       (concatMap (builtins.split "/") paths)
     );
 
+  # Remove duplicate "/" elements, "/./", "foo/..", etc., from a path
+  cleanPath = path:
+    let
+      dummy = builtins.placeholder path;
+      prefix = "${dummy}/";
+      expanded = toString (/. + "${prefix}${path}");
+    in
+    if lib.hasPrefix "/" path then
+      toString (/. + path)
+    else if expanded == dummy then
+      "."
+    else if lib.hasPrefix prefix expanded then
+      removePrefix prefix expanded
+    else
+      throw "illegal path traversal in `${path}`";
+
   # ["home" "user" ".screenrc"] -> "home/user/.screenrc"
   dirListToPath = dirList: (concatStringsSep "/" dirList);
 
@@ -47,5 +63,6 @@ let
     result.duplicates;
 in
 {
-  inherit splitPath dirListToPath concatPaths sanitizeName duplicates;
+  inherit splitPath cleanPath dirListToPath concatPaths sanitizeName
+    duplicates;
 }
