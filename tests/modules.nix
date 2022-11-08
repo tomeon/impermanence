@@ -5,7 +5,7 @@ let
 
   inherit (nixpkgs.lib) any escapeShellArg nixosSystem runTests;
 
-  inherit (pkgs.callPackage ../lib.nix { }) cleanPath;
+  inherit (pkgs.callPackage ../lib.nix { }) cleanPath splitPath;
 
   mkSystem = config: nixosSystem {
     inherit system;
@@ -89,6 +89,11 @@ let
     testCleanPath = {
       expected = "bar";
       expr = cleanPath "foo/../bar";
+    };
+
+    testSplitPath = {
+      expected = [ "foo" "bar" "bazz" ];
+      expr = splitPath [ "././foo/." "/bar/bazz/./" ];
     };
   };
 in
