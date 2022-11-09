@@ -4,7 +4,7 @@ let
     replaceStrings removePrefix foldl' elem toposort genAttrs
     zipAttrsWith flatten attrValues unique;
   inherit (lib.strings) sanitizeDerivationName;
-  inherit (lib.types) coercedTo str;
+  inherit (lib.types) coercedTo nonEmptyStr;
 
   # ["/home/user/" "/.screenrc"] -> ["home" "user" ".screenrc"]
   splitPath = paths:
@@ -57,8 +57,8 @@ let
     in
     result.duplicates;
 
-  coercedToDir = coercedTo str (directory: { inherit directory; });
-  coercedToFile = coercedTo str (file: { inherit file; });
+  coercedToDir = coercedTo nonEmptyStr (directory: { inherit directory; });
+  coercedToFile = coercedTo nonEmptyStr (file: { inherit file; });
 
   # Append a trailing slash to a path if it does not already have one.
   #

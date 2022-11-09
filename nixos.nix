@@ -184,7 +184,7 @@ in
               fileOpts = perms: {
                 options = {
                   file = mkOption {
-                    type = str;
+                    type = nonEmptyStr;
                     description = ''
                       The path to the file.
                     '';
@@ -195,7 +195,7 @@ in
               dirOpts = perms: {
                 options = {
                   directory = mkOption {
-                    type = str;
+                    type = nonEmptyStr;
                     description = ''
                       The path to the directory.
                     '';
