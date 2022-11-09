@@ -2,7 +2,7 @@
 let
   inherit (lib) filter concatMap concatStringsSep hasPrefix head
     replaceStrings removePrefix foldl' elem toposort genAttrs
-    zipAttrsWith flatten attrValues;
+    zipAttrsWith flatten attrValues unique;
   inherit (lib.strings) sanitizeDerivationName;
   inherit (lib.types) coercedTo str;
 
@@ -112,10 +112,23 @@ let
     in
     dirs: toposort dirBefore (normalizeDirs dirs);
 
+  recursivePersistentPaths =
+    let
+      pointsIntoPersistentStoragePath = a: b: strictPrefix b.normalized.persistentStoragePath a.normalized.destination;
+      findMatches = dir: dirs: unique (map (match: match.persistentStoragePath) (filter (pointsIntoPersistentStoragePath dir) dirs));
+      mapMatches = dir: dirs: map (match: { inherit (dir) destination source; persistentStoragePath = match; }) (findMatches dir dirs);
+    in
+    dirs:
+    let
+      normalized = normalizeDirs dirs;
+    in
+    concatMap (dir: mapMatches dir normalized) normalized;
+
   extractPersistentStoragePaths = cfg: { directories = [ ]; files = [ ]; users = [ ]; }
     // (zipAttrsWith (_name: flatten) (attrValues cfg));
 in
 {
   inherit splitPath cleanPath dirListToPath concatPaths sanitizeName duplicates
-    coercedToDir coercedToFile toposortDirs extractPersistentStoragePaths;
+    coercedToDir coercedToFile toposortDirs extractPersistentStoragePaths
+    recursivePersistentPaths;
 }

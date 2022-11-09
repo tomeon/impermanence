@@ -9,7 +9,7 @@ let
 
   inherit (pkgs.callPackage ./lib.nix { }) splitPath dirListToPath
     concatPaths sanitizeName duplicates coercedToDir coercedToFile
-    toposortDirs extractPersistentStoragePaths;
+    toposortDirs extractPersistentStoragePaths recursivePersistentPaths;
 
   cfg = config.environment.persistence;
   users = config.users.users;
@@ -551,6 +551,8 @@ in
         homeDirOffenders =
           filterAttrs
             (n: v: (v.home != config.users.users.${n}.home));
+
+        recursive = optionals (sortedDirs ? result) (recursivePersistentPaths sortedDirs.result);
       in
       [
         {
@@ -639,6 +641,16 @@ in
 
                   Issues like these prevent the 'environment.persistence' module from creating source and destination directories and setting their permissions in a stable and consistent order.
             '';
+        }
+        {
+          assertion = recursive == [ ];
+          message = ''
+            environment.persistence:
+                Recursive persistent storage paths are not supported.
+                  ${concatMapStringsSep "\n" (loop: ''
+                  Destination path '${loop.destination}' for source '${loop.source}' is under persistent storage path '${loop.persistentStoragePath}'
+                  '') recursive}
+          '';
         }
       ];
   };

@@ -108,6 +108,10 @@ let
       };
     };
 
+    testRecursivePersistentPaths = checkAssertionsMatch "Recursive persistent storage paths are not supported" {
+      environment.persistence."/abc".directories = [ "/abc/def" ];
+    };
+
     testNoSpuriousSourcePrefixDetection =
       let
         result = mkSystem {
