@@ -3,6 +3,7 @@ let
   inherit (lib) filter concatMap concatStringsSep hasPrefix head
     replaceStrings removePrefix foldl' elem;
   inherit (lib.strings) sanitizeDerivationName;
+  inherit (lib.types) coercedTo str;
 
   # ["/home/user/" "/.screenrc"] -> ["home" "user" ".screenrc"]
   splitPath = paths:
@@ -54,8 +55,11 @@ let
           list;
     in
     result.duplicates;
+
+  coercedToDir = coercedTo str (directory: { inherit directory; });
+  coercedToFile = coercedTo str (file: { inherit file; });
 in
 {
   inherit splitPath cleanPath dirListToPath concatPaths sanitizeName
-    duplicates;
+    duplicates coercedToDir coercedToFile;
 }
