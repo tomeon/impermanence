@@ -200,6 +200,20 @@ in
                       The path to the directory.
                     '';
                   };
+
+                  implicit = mkOption {
+                    type = bool;
+                    default = false;
+                    internal = true;
+                    description = ''
+                      Whether the directory is implicit; that is, whether it is
+                      created as the parent of an explicitly-specified file.
+                      When true, permissions are copied from
+                      <literal>destination</literal> to
+                      <literal>source</literal>, rather than vice-versa, but
+                      only if <literal>source</literal> does not already exist.
+                    '';
+                  };
                 } // (dirPermsOpts perms);
               };
               rootFile = submodule [
@@ -476,6 +490,7 @@ in
           , user
           , group
           , mode
+          , implicit ? false
           , ...
           }:
           let
@@ -488,6 +503,7 @@ in
               user
               group
               mode
+              implicit
               cfg.${persistentStoragePath}.enableDebugging
             ];
           in
@@ -638,6 +654,9 @@ in
 
                   This can happen when the source path of one directory is a prefix of the source path of a second, and the destination path of the second directory is a prefix of the destination path of the first.
                   For instance: '[ { directory = "abc"; root = "/abc/def"; } { directory = "abc/def"; } ]'.
+
+                  It can also happen due to inconsistent permissions.
+                  For instance: '[ { file = "abc/def"; parentDirectory.mode = "755"; } { file = "abc/xyz"; parentDirectory.mode = "700"; } ]'.
 
                   Issues like these prevent the 'environment.persistence' module from creating source and destination directories and setting their permissions in a stable and consistent order.
             '';

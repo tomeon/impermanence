@@ -230,6 +230,41 @@
     directories were allowed, running those steps again would result in
     changing ~/ghi~ to have mode ~0770~, user ~me~, and group ~me~.
 
+***** Inconsistent directory permissions are prohibited
+
+    Configurations like the following are invalid:
+
+    #+begin_src nix
+      {
+        environment.persistence = {
+          "/abc".files = [
+            { file = "foo/bar"; parentDirectory = { mode = "0755"; }; }
+          ];
+
+          "/def".files = [
+            { file = "foo/lsgold"; parentDirectory = { mode = "2700"; }; }
+          ];
+        };
+      }
+    #+end_src
+
+    Configurations like this prevent Impermanence from determining what
+    permissions to use when creating ~/foo~.
+
+    Likewise:
+
+    #+begin_src nix
+      {
+        environment.persistence."/abc".directories = [
+          { directory = "foo"; mode = "0755"; }
+          { directory = "foo"; mode = "0700"; root = "/elsewhere"; }
+        ];
+      }
+    #+end_src
+
+    Configurations like this prevent Impermanence from determining what
+    permissions to use when creating ~/abc/foo~.
+
 ***** Path traversal is prohibited
 
     Impermanence will abort if any path specification in its configuration
@@ -260,6 +295,31 @@
 
     Impermanence can resolve ~foo/../bar~ to just ~bar~ without traversing out
     of the persistent storage path.
+
+***** ~directory~ permissions override ~parentDirectory~ permissions
+
+    Consider this configuration:
+
+    #+begin_src nix
+      {
+        environment.persistence = {
+          "/abc".files = [
+            { file = "foo/bar"; parentDirectory = { mode = "0755"; user = "benny"; group = "benny"; }; }
+          ];
+
+          "/def".files = [
+            { directory = "foo"; mode = "0700"; user = "alex"; group = "alex"; }
+          ];
+        };
+      }
+    #+end_src
+
+    Given this configuration, Impermanence will create the directory ~/foo~ (if
+    it does not already exist) and assign it mode ~0700~, user ~alex~, and
+    group ~alex~.  It will /not/ assign it mode ~0755~, user ~benny~, and group
+    ~benny~, because the settings associated with explicitly-defined
+    directories take precedence over the settings associated with
+    implicitly-defined parent directories.
 
 *** home-manager
 

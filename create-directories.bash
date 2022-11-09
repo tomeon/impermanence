@@ -84,8 +84,8 @@ atomicDirFromReference() {
 
 createDirs() {
     # Get inputs from command line arguments
-    if [[ "$#" != 9 ]]; then
-        printf "Error: 'create-directories.bash' requires *9* args.\n" >&2
+    if [[ "$#" != 10 ]]; then
+        printf "Error: 'create-directories.bash' requires *10* args.\n" >&2
         return 1
     fi
 
@@ -111,6 +111,9 @@ createDirs() {
     shift
 
     local mode="$1"
+    shift
+
+    local implicit="$1"
     shift
 
     local debug="$1"
@@ -218,7 +221,9 @@ createDirs() {
         fi
 
         # If we're on the last part of the path, copy the permissions from the
-        # destination directory.
+        # destination directory if the caller told us that this directory is
+        # being created implicitly (i.e. as the parent directory of an
+        # explicitly-specified persistent file).
         #
         # Otherwise, copy permissions from the destination if and only if we
         # haven't already processed the destination path.
@@ -253,7 +258,7 @@ createDirs() {
         # responsible for having created the destination path `/foo/bar/bazz`,
         # we know that we should not copy its permissions to a source path.
         if (( pathPartsIdx == (pathPartsSize - 1) )); then
-            copyPermsFromDestination=1
+            copyPermsFromDestination="$implicit"
         elif (( destinationProcessedAlready )); then
             copyPermsFromDestination=0
         else

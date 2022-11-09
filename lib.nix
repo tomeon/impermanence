@@ -105,10 +105,43 @@ let
           # Similarly, `b` depends on `a` if `a.destination` is a strict prefix
           # of `b.destination`.
           strictPrefixOfDestination = a: b: strictPrefix a.normalized.destination b.normalized.destination;
+
+          # `b` depends on `a` if:
+          #
+          #     1a. `a.source` and `b.source` are identical
+          #
+          #       *OR*
+          #
+          #     1b. `a.destination` and `b.destination` are identical
+          #
+          #   *AND*
+          #
+          #     2a. `a.implicit` is false and `b.implicit` is true,
+          #
+          #       *OR*
+          #
+          #     2b. `a.implicit` and `b.implicit` are identical, and `a` and
+          #         `b` specify different permissions.
+          #
+          # Condition 2a makes sure we prefer user, group, and mode settings
+          # from explicitly-specified directories over those from
+          # implicitly-specified directories (that is, parent directories of
+          # explicitly-specified files).
+          #
+          # Condition 2b models inconsistent permissions settings as cycles in
+          # the directory dependency graph.
+          givenIdentical =
+            let
+              identical = a: b: (a.source == b.source) || (a.destination == b.destination);
+              differentPerms = a: b: a.mode != b.mode || a.user != b.user || a.group != b.group;
+            in
+            a: b:
+              (identical a b) && ((!a.implicit && b.implicit) || ((a.implicit == b.implicit) && differentPerms a b));
         in
         a: b:
           strictPrefixOfSource a b
-          || strictPrefixOfDestination a b;
+          || strictPrefixOfDestination a b
+          || givenIdentical a b;
     in
     dirs: toposort dirBefore (normalizeDirs dirs);
 

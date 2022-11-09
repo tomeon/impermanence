@@ -150,6 +150,25 @@ let
         expr = map (dir: dir.persistentStoragePath) sortedDirs.result;
       };
 
+    testInconsistentParentDirectoryPermissions = checkAssertionsMatch toposortErrorPattern {
+      environment.persistence = {
+        "/abc".files = [
+          { file = "foo/bar"; parentDirectory = { mode = "0755"; }; }
+        ];
+
+        "/def".files = [
+          { file = "foo/lsgold"; parentDirectory = { mode = "2700"; }; }
+        ];
+      };
+    };
+
+    testInconsistentDirectoryPermissions = checkAssertionsMatch toposortErrorPattern {
+      environment.persistence."/abc".directories = [
+        { directory = "foo"; mode = "0755"; }
+        { directory = "foo"; mode = "0700"; root = "/elsewhere"; }
+      ];
+    };
+
     testNoPathTraversalAllowed = checkEvalError (cleanPath "../foo/bar");
 
     testCleanPath = {
