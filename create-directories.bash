@@ -34,6 +34,11 @@ printMsg() {
 }
 
 initDir() {
+    # `user`, `group`, and `mode` options use `types.str`, so empty strings are
+    # permitted.  Treat empty strings as signifying that we should omit the
+    # relevant `install` flags.
+    printMsg "Warning: directory '${1?}' does not exist; creating it with these permissions: owner: '${user:-<unspecified>}:${group:-<unspecified>}', mode: '${mode:-<unspecified>}'." >&2
+
     install -d ${mode:+--mode="$mode"} ${user:+--owner "$user"} ${group:+--group "$group"} "${1?}"
 }
 
@@ -113,6 +118,14 @@ createDirs() {
 
     if (( debug )); then
         set -o xtrace
+
+        diag() {
+            printMsg "$@"
+        }
+    else
+        diag() {
+            :
+        }
     fi
 
     local realSource
@@ -250,8 +263,10 @@ createDirs() {
         # create the source directory if it does not exist
         if ! [[ -d "$currentRealSourcePath" ]]; then
             if (( copyPermsFromDestination )) && [[ -d "$currentRealDestinationPath" ]]; then
+                diag "[source] creating directory '$currentRealSourcePath' using permissions from '$currentRealDestinationPath'"
                 atomicDirFromReference "$currentRealSourcePath" "$currentRealDestinationPath"
             else
+                diag "[source] creating directory '$currentRealSourcePath' using supplied permissions"
                 initDir "$currentRealSourcePath"
             fi
         fi
@@ -259,11 +274,15 @@ createDirs() {
         # create the destination directory, if necessary, and copy permissions
         # from the source directory
         if [[ -d "$currentRealDestinationPath" ]]; then
-            if ! (( destinationProcessedAlready )); then
+            if (( destinationProcessedAlready )); then
+                diag "[destination] '$currentRealDestinationPath' already processed"
+            else
+                diag "[destination] setting permissions on '$currentRealDestinationPath' using permissions from '$currentRealSourcePath'"
                 permsFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
                 destinationsProcessed[${currentRealDestinationPath}]=1
             fi
         else
+            diag "[destination] creating directory '$currentRealDestinationPath' using permissions from '$currentRealSourcePath'"
             atomicDirFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
             destinationsProcessed[${currentRealDestinationPath}]=1
         fi
