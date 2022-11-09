@@ -3,7 +3,7 @@
 let
   pkgs = nixpkgs.legacyPackages.${system};
 
-  inherit (nixpkgs.lib) any escapeShellArg nixosSystem runTests;
+  inherit (nixpkgs.lib) any escapeShellArg nixosSystem runTests toList;
 
   inherit (pkgs.callPackage ../lib.nix { }) cleanPath splitPath dirListToPath
     concatPaths;
@@ -19,12 +19,20 @@ let
 
   search = pattern: str: (builtins.match ".*${pattern}.*" str) != null;
 
-  assertionsMatch = pattern: any (assertion: !assertion.assertion && search pattern assertion.message);
+  assertionsMatch = patterns: assertions:
+    let
+      failed = builtins.filter (assertion: !assertion.assertion) assertions;
+      matchAnyPattern = assertion: any (pattern: search pattern assertion.message) (toList patterns);
+    in
+    any matchAnyPattern failed;
 
-  checkAssertionsMatch = pattern: config: {
-    expected = true;
-    expr = assertionsMatch pattern (mkSystem config).config.assertions;
+  checkAssertions = expected: patterns: config: {
+    inherit expected;
+    expr = assertionsMatch patterns (mkSystem config).config.assertions;
   };
+
+  checkAssertionsMatch = checkAssertions true;
+  checkAssertionsDoNotMatch = checkAssertions false;
 
   checkEval = expected: thing:
     let
@@ -72,6 +80,19 @@ let
         "/def".users.auser.files = [ "/same/file" ];
       };
     };
+
+    testNoSpuriousDuplicateDetection =
+      let
+        patterns = [
+          duplicateFilePattern
+        ];
+      in
+      checkAssertionsDoNotMatch patterns {
+        environment.persistence."/abc".directories = [
+          { directory = "foo"; mode = "0755"; }
+          { directory = "foo"; mode = "0755"; root = "/elsewhere"; }
+        ];
+      };
 
     testMissingNeededForBoot = checkAssertionsMatch "All filesystems used for persistent storage must[^a-z]*have the flag neededForBoot" {
       fileSystems."/abc" = { fsType = "tmpfs"; neededForBoot = false; };

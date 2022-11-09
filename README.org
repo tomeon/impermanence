@@ -93,6 +93,12 @@
         likely be left to its default value - don't change it unless
         you're certain you really need to.
 
+      - ~root~, the parent directory for bind mount destination paths.
+        Defaults to ~/~.  Given ~directory~ ~/bazz~ and ~root~ ~/foo/bar~, the
+        full path of the bind mount destination would be ~/foo/bar/bazz~ (that
+        is, subdirectory ~/bazz~ of the persistent storage path would be
+        bind mounted at ~/foo/bar/bazz~).
+
       - ~user~, the user who should own the directory. If the directory
         doesn't already exist in persistent storage, it will be
         created and this user will be its owner. This also applies to
@@ -123,6 +129,12 @@
       - ~file~, the path to the file you want to bind mount to
         persistent storage. Only setting this option is equivalent to
         the string representation.
+
+      - ~root~, the parent directory for link or bind mount destination paths.
+        Defaults to ~/~.  Given ~file~ ~/bazz~ and ~root~ ~/foo/bar~, the full
+        path of the link or bind mount destination would be ~/foo/bar/bazz~
+        (that is, subpath ~file~ of the persistent storage path would be bind
+        mounted at, or linked from, ~/foo/bar/bazz~).
 
       - ~persistentStoragePath~, the path to persistent
         storage. Defaults to the ~environment.persistence~ submodule

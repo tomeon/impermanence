@@ -65,6 +65,14 @@ in
                       file should be stored.
                     '';
                   };
+                  root = mkOption {
+                    type = path;
+                    default = "/";
+                    description = ''
+                      The path relative to which the output path will be
+                      created.
+                    '';
+                  };
                   prefix = mkOption {
                     # *not* path -- permit stuff that does not start with "/"
                     type = nonEmptyStr;
@@ -74,7 +82,7 @@ in
                       Path fragment prepended to <literal>${attrName}</literal>
                       when expanding it relative to
                       <literal>persistentStorageDirectory</literal> and
-                      <literal>/</literal>.  Exists to support the implicit
+                      <literal>root</literal>.  Exists to support the implicit
                       home directory that appears before user file and
                       directory specifications.
                     '';
@@ -87,7 +95,7 @@ in
                     description = ''
                       The file path relative to
                       <literal>persistentStoragePath</literal> and
-                      <literal>/</literal>
+                      <literal>root</literal>
                     '';
                   };
                   source = mkOption {
@@ -107,14 +115,15 @@ in
                   destination = mkOption {
                     type = path;
                     internal = true;
-                    default = concatPaths [ "/" config.relpath ];
+                    default = concatPaths [ config.root config.relpath ];
                     description = ''
                       The fully-qualified and normalized path rooted in
-                      <literal>/</literal>.  That is, given
-                      <literal>prefix</literal>bazz/quux</literal> and
+                      <literal>root</literal>.  That is, given
+                      <literal>root</literal> "/foo/bar",
+                      <literal>prefix</literal>bazz/quux</literal>, and
                       <literal>${attrName}</literal> "arr/iffic",
                       <literal>destination</literal> will be
-                      "/bazz/quux/arr/iffic".
+                      "/foo/bar/bazz/quux/arr/iffic".
                     '';
                   };
                 };
