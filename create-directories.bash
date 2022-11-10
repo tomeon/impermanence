@@ -71,66 +71,73 @@ atomicDirFromReference() {
     atomicDir "${1?}" permsFromReference "${2?}"
 }
 
-# Get inputs from command line arguments
-if [[ "$#" != 6 ]]; then
-    printf "Error: 'create-directories.bash' requires *six* args.\n" >&2
-    exit 1
-fi
-sourceBase="$1"
-target="$2"
-user="$3"
-group="$4"
-mode="$5"
-debug="$6"
+createDirs() {
+    # Get inputs from command line arguments
+    if [[ "$#" != 6 ]]; then
+        printf "Error: 'create-directories.bash' requires *six* args.\n" >&2
+        exit 1
+    fi
+    sourceBase="$1"
+    target="$2"
+    user="$3"
+    group="$4"
+    mode="$5"
+    debug="$6"
 
-if (( "$debug" )); then
-    set -o xtrace
-fi
-
-# trim trailing slashes the root of all evil
-sourceBase="${sourceBase%/}"
-target="${target%/}"
-
-# check that the source exists and warn the user if it doesn't
-realSource="$(realpath -m "$sourceBase$target")"
-if [[ ! -d "$realSource" ]]; then
-    printf "Warning: Source directory '%s' does not exist; it will be created for you with the following permissions: owner: '%s:%s', mode: '%s'.\n" "$realSource" "$user" "$group" "$mode"
-fi
-
-# iterate over each part of the target path, e.g. var, lib, iwd
-previousPath="/"
-
-OLD_IFS=$IFS
-IFS=/ # split the path on /
-for pathPart in $target; do
-    IFS=$OLD_IFS
-
-    # skip empty parts caused by the prefix slash and multiple
-    # consecutive slashes
-    [[ "$pathPart" == "" ]] && continue
-
-    # construct the incremental path, e.g. /var, /var/lib, /var/lib/iwd
-    currentTargetPath="$previousPath$pathPart/"
-
-    # construct the source path, e.g. /state/var, /state/var/lib, ...
-    currentSourcePath="$sourceBase$currentTargetPath"
-
-    # create the source and target directories if they don't exist
-    if [[ ! -d "$currentSourcePath" ]]; then
-        initDir "$currentSourcePath"
+    if (( debug )); then
+        set -o xtrace
     fi
 
-    # resolve the source path to avoid symlinks
-    currentRealSourcePath="$(realpath -m "$currentSourcePath")"
+    # trim trailing slashes the root of all evil
+    sourceBase="${sourceBase%/}"
+    target="${target%/}"
 
-    if [[ -d "$currentTargetPath" ]]; then
-        # synchronize perms between source and target
-        permsFromReference "$currentTargetPath" "$currentRealSourcePath"
-    else
-        # create target directory with perms from source
-        atomicDirFromReference "$currentTargetPath" "$currentRealSourcePath"
+    # check that the source exists and warn the user if it doesn't
+    realSource="$(realpath -m "$sourceBase$target")"
+    if [[ ! -d "$realSource" ]]; then
+        printf "Warning: Source directory '%s' does not exist; it will be created for you with the following permissions: owner: '%s:%s', mode: '%s'.\n" "$realSource" "$user" "$group" "$mode"
     fi
 
-    # lastly we update the previousPath to continue down the tree
-    previousPath="$currentTargetPath"
-done
+    # iterate over each part of the target path, e.g. var, lib, iwd
+    previousPath="/"
+
+    OLD_IFS=$IFS
+    IFS=/ # split the path on /
+    for pathPart in $target; do
+        IFS=$OLD_IFS
+
+        # skip empty parts caused by the prefix slash and multiple
+        # consecutive slashes
+        [[ "$pathPart" == "" ]] && continue
+
+        # construct the incremental path, e.g. /var, /var/lib, /var/lib/iwd
+        currentTargetPath="$previousPath$pathPart/"
+
+        # construct the source path, e.g. /state/var, /state/var/lib, ...
+        currentSourcePath="$sourceBase$currentTargetPath"
+
+        # create the source and target directories if they don't exist
+        if [[ ! -d "$currentSourcePath" ]]; then
+            initDir "$currentSourcePath"
+        fi
+
+        # resolve the source path to avoid symlinks
+        currentRealSourcePath="$(realpath -m "$currentSourcePath")"
+
+        if [[ -d "$currentTargetPath" ]]; then
+            # synchronize perms between source and target
+            permsFromReference "$currentTargetPath" "$currentRealSourcePath"
+        else
+            # create target directory with perms from source
+            atomicDirFromReference "$currentTargetPath" "$currentRealSourcePath"
+        fi
+
+        # lastly we update the previousPath to continue down the tree
+        previousPath="$currentTargetPath"
+    done
+}
+
+# if `return 0` succeeds, this script is being sourced
+if ! (return 0) &>/dev/null; then
+    createDirs "$@"
+fi

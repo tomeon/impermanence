@@ -479,7 +479,7 @@ in
             ];
           in
           ''
-            ${createDirectories} ${escapeShellArgs args}
+            createDirs ${escapeShellArgs args}
           '';
 
         # Build an activation script which creates all persistent
@@ -488,6 +488,7 @@ in
           pkgs.writeShellScript "impermanence-run-create-directories" ''
             _status=0
             trap "_status=1" ERR
+            source ${createDirectories}
             ${concatMapStrings mkDirWithPerms sortedDirs.result}
             exit $_status
           '';
