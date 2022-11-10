@@ -161,6 +161,11 @@ createDirs() {
     # exists in `destinationsProcessed`).
     local -i destinationProcessedAlready
 
+    # Whether to copy permissions from the destination directory to the source
+    # directory (given that the destination directory exists, and that the
+    # source directory does not exist).
+    local -i copyPermsFromDestination
+
     local -i pathPartsIdx
     local -i pathPartsSize="${#pathParts[@]}"
 
@@ -199,9 +204,56 @@ createDirs() {
             destinationProcessedAlready=0
         fi
 
+        # If we're on the last part of the path, copy the permissions from the
+        # destination directory.
+        #
+        # Otherwise, copy permissions from the destination if and only if we
+        # haven't already processed the destination path.
+        #
+        # This is meant to deal with the case where we have one or more
+        # persistent storage paths, as well as directories under those storage
+        # paths that are partial prefix matches for one another.
+        #
+        # For instance, consider this configuration:
+        #
+        #   {
+        #     environment.persistence = {
+        #       "/abc".directories = [
+        #         { directory = "/foo/bar/bazz/quux"; user = "alex"; group = "alex"; }
+        #       ];
+        #
+        #       "/def".directories = [
+        #         { directory = "/foo/bar/bazz"; user = "benny"; group = "benny"; }
+        #       ];
+        #     };
+        #   }
+        #
+        # Assume that we're creating the *source* directories.  Because
+        # `/foo/bar/bazz` is a prefix of `/foo/bar/bazz/quux`, we're going to
+        # create the destination directory `/foo/bar/bazz` with owner `benny`
+        # and group `benny`, and do so *before* creating the source directory
+        # `/abc/foo/bar/bazz/quux`.
+        #
+        # Presumably we want to create `/abc/foo/bar/bazz` (the parent
+        # directory of `/abc/foo/bar/bazz/quux`) with owner `alex` and group
+        # `alex`.  That is what this logic enforces -- by detecting that we're
+        # responsible for having created the destination path `/foo/bar/bazz`,
+        # we know that we should not copy its permissions to a source path.
+        if (( pathPartsIdx == (pathPartsSize - 1) )); then
+            copyPermsFromDestination=1
+        elif (( destinationProcessedAlready )); then
+            copyPermsFromDestination=0
+        else
+            copyPermsFromDestination=1
+        fi
+
         # create the source directory if it does not exist
         if ! [[ -d "$currentRealSourcePath" ]]; then
-            initDir "$currentRealSourcePath"
+            if (( copyPermsFromDestination )) && [[ -d "$currentRealDestinationPath" ]]; then
+                atomicDirFromReference "$currentRealSourcePath" "$currentRealDestinationPath"
+            else
+                initDir "$currentRealSourcePath"
+            fi
         fi
 
         # create the destination directory, if necessary, and copy permissions
