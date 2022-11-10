@@ -467,10 +467,23 @@ in
           patchShebangs $out
         '';
 
-        mkDirWithPerms = { destination, persistentStoragePath, user, group, mode, ... }:
+        mkDirWithPerms =
+          { persistentStoragePath
+          , root
+          , relpath
+          , source
+          , destination
+          , user
+          , group
+          , mode
+          , ...
+          }:
           let
             args = [
               persistentStoragePath
+              root
+              relpath
+              source
               destination
               user
               group

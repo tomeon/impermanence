@@ -27,6 +27,10 @@ trap 'echo Error when executing ${BASH_COMMAND} at line ${LINENO}! >&2' ERR
 #   2. Copy the ownership of the source path to the target path
 #   3. Copy the mode of the source path to the target path
 
+printMsg() {
+    printf "create-directories.bash: %s\n" "$*"
+}
+
 initDir() {
     install -d ${mode:+--mode="$mode"} ${user:+--owner "$user"} ${group:+--group "$group"} "${1?}"
 }
@@ -73,67 +77,124 @@ atomicDirFromReference() {
 
 createDirs() {
     # Get inputs from command line arguments
-    if [[ "$#" != 6 ]]; then
-        printf "Error: 'create-directories.bash' requires *six* args.\n" >&2
-        exit 1
+    if [[ "$#" != 9 ]]; then
+        printf "Error: 'create-directories.bash' requires *9* args.\n" >&2
+        return 1
     fi
-    sourceBase="$1"
-    target="$2"
-    user="$3"
-    group="$4"
-    mode="$5"
-    debug="$6"
+
+    local persistentStoragePath="$1"
+    shift
+
+    local root="$1"
+    shift
+
+    local relpath="$1"
+    shift
+
+    local source="${1:-${persistentStoragePath}/${relpath}}"
+    shift
+
+    local destination="${1:-${root}/${relpath}}"
+    shift
+
+    local user="$1"
+    shift
+
+    local group="$1"
+    shift
+
+    local mode="$1"
+    shift
+
+    local debug="$1"
+    shift
 
     if (( debug )); then
         set -o xtrace
     fi
 
-    # trim trailing slashes the root of all evil
-    sourceBase="${sourceBase%/}"
-    target="${target%/}"
+    local realSource
+    realSource="$(realpath -m "$source")"
 
-    # check that the source exists and warn the user if it doesn't
-    realSource="$(realpath -m "$sourceBase$target")"
-    if [[ ! -d "$realSource" ]]; then
-        printf "Warning: Source directory '%s' does not exist; it will be created for you with the following permissions: owner: '%s:%s', mode: '%s'.\n" "$realSource" "$user" "$group" "$mode"
+    local realSourceResolved
+    realSourceResolved="$(realpath -m "${persistentStoragePath}/${relpath}")"
+
+    if [[ "$realSource" != "$realSourceResolved" ]]; then
+        printMsg "internal error: real path of source '${source}' ('${realSource}') does not match real path of joined persistent storage path '${persistentStoragePath}' and relative path '${relpath}' ('${realSourceResolved}')" >&2
+        return 1
     fi
 
-    # iterate over each part of the target path, e.g. var, lib, iwd
-    previousPath="/"
+    local realDestination
+    realDestination="$(realpath -m "$destination")"
 
-    # split the path on /
+    local realDestinationResolved
+    realDestinationResolved="$(realpath -m "${root}/${relpath}")"
+
+    if [[ "$realDestination" != "$realDestinationResolved" ]]; then
+        printMsg "internal error: real path of destination '${destination}' ('${realDestination}') does not match real path of joined root path '${root}' and relative path '${relpath}' ('${realDestinationResolved}')" >&2
+        return 1
+    fi
+
+    if [[ "$realSource" == "$realDestination" ]]; then
+        printMsg "internal error: real path of source '${source}' ('${realSource}') is identical to real path of destination '${destination}' ('${realDestination}')" >&2
+        return 1
+    fi
+
+    # Iterate over each part of the relative path, e.g. var, lib, etc.
     local -a pathParts
-    mapfile -d / -t pathParts < <(printf "%s" "$target")
+    mapfile -d / -t pathParts < <(printf "%s" "${relpath#/}") || :
 
-    for pathPart in "${pathParts[@]}"; do
-        # skip empty parts caused by the prefix slash and multiple
-        # consecutive slashes
-        [[ "$pathPart" == "" ]] && continue
+    local pathPart currentPath previousPath
+    local currentDestinationPath currentSourcePath
+    local currentRealDestinationPath currentRealSourcePath
+
+    local -i pathPartsIdx
+    local -i pathPartsSize="${#pathParts[@]}"
+
+    for (( pathPartsIdx=0 ; pathPartsIdx < pathPartsSize ; pathPartsIdx++ )); do
+        pathPart="${pathParts[pathPartsIdx]}"
+
+        case "$pathPart" in
+            '')
+                continue
+                ;;
+            ..)
+                # All lexically-resolvable `..` elements should already have
+                # been resolved by the impermanence module
+                printMsg "internal error: illegal path traversal in '${relpath}'" 1>&2
+                return 1
+                ;;
+        esac
+
+        currentPath="${previousPath:+${previousPath}/}${pathPart}"
 
         # construct the incremental path, e.g. /var, /var/lib, /var/lib/iwd
-        currentTargetPath="$previousPath$pathPart/"
+        currentDestinationPath="${root}/${currentPath}"
 
         # construct the source path, e.g. /state/var, /state/var/lib, ...
-        currentSourcePath="$sourceBase$currentTargetPath"
+        currentSourcePath="${persistentStoragePath}/${currentPath}"
 
-        # create the source and target directories if they don't exist
-        if [[ ! -d "$currentSourcePath" ]]; then
-            initDir "$currentSourcePath"
-        fi
+        # resolve the output path
+        currentRealDestinationPath="$(realpath -m "$currentDestinationPath")"
 
         # resolve the source path to avoid symlinks
         currentRealSourcePath="$(realpath -m "$currentSourcePath")"
 
-        if [[ -d "$currentTargetPath" ]]; then
-            # synchronize perms between source and target
-            permsFromReference "$currentTargetPath" "$currentRealSourcePath"
+        # create the source directory if it does not exist
+        if ! [[ -d "$currentRealSourcePath" ]]; then
+            initDir "$currentRealSourcePath"
+        fi
+
+        # create the destination directory, if necessary, and copy permissions
+        # from the source directory
+        if [[ -d "$currentRealDestinationPath" ]]; then
+            permsFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
         else
-            # create target directory with perms from source
-            atomicDirFromReference "$currentTargetPath" "$currentRealSourcePath"
+            atomicDirFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
         fi
 
         # lastly we update the previousPath to continue down the tree
-        previousPath="$currentTargetPath"
+        previousPath="$currentPath"
     done
 }
 
