@@ -24,8 +24,10 @@ trap 'echo Error when executing ${BASH_COMMAND} at line ${LINENO}! >&2' ERR
 # (/target/, /target/foo/, /target/foo/bar, and so on); then, for each of
 # these increasingly qualified paths we:
 #   1. Ensure both /source/qualifiedPath and qualifiedPath exist
-#   2. Copy the ownership of the source path to the target path
-#   3. Copy the mode of the source path to the target path
+#   2. Copy the ownership of the source path to the target path (subject to
+#      some exceptions described in the `createDirs` function)
+#   3. Copy the mode of the source path to the target path (again subject to
+#      some exceptions described in `createDirs`)
 
 printMsg() {
     printf "create-directories.bash: %s\n" "$*"
@@ -148,6 +150,17 @@ createDirs() {
     local currentDestinationPath currentSourcePath
     local currentRealDestinationPath currentRealSourcePath
 
+    # XXX global associative array -- tracks which destination directories
+    # we've created, chowned, and/or chmodded.  Used to short-circuit if a
+    # destination was already processed; prevents later/lower-precedence
+    # directory settings from clobbering permissions set on the basis of
+    # earlier/higher-precedence directories.
+    declare -gA destinationsProcessed
+
+    # Whether we've already processed the destination directories (== path
+    # exists in `destinationsProcessed`).
+    local -i destinationProcessedAlready
+
     local -i pathPartsIdx
     local -i pathPartsSize="${#pathParts[@]}"
 
@@ -180,6 +193,12 @@ createDirs() {
         # resolve the source path to avoid symlinks
         currentRealSourcePath="$(realpath -m "$currentSourcePath")"
 
+        if [[ -n "${destinationsProcessed[${currentRealDestinationPath}]:-}" ]]; then
+            destinationProcessedAlready=1
+        else
+            destinationProcessedAlready=0
+        fi
+
         # create the source directory if it does not exist
         if ! [[ -d "$currentRealSourcePath" ]]; then
             initDir "$currentRealSourcePath"
@@ -188,9 +207,13 @@ createDirs() {
         # create the destination directory, if necessary, and copy permissions
         # from the source directory
         if [[ -d "$currentRealDestinationPath" ]]; then
-            permsFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
+            if ! (( destinationProcessedAlready )); then
+                permsFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
+                destinationsProcessed[${currentRealDestinationPath}]=1
+            fi
         else
             atomicDirFromReference "$currentRealDestinationPath" "$currentRealSourcePath"
+            destinationsProcessed[${currentRealDestinationPath}]=1
         fi
 
         # lastly we update the previousPath to continue down the tree
