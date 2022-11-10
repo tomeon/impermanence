@@ -5,15 +5,15 @@ let
     types foldl' unique noDepEntry concatMapStrings listToAttrs
     escapeShellArg escapeShellArgs replaceStrings recursiveUpdate all
     filter filterAttrs concatStringsSep concatMapStringsSep isString
-    catAttrs optional literalExpression genAttrs;
+    catAttrs optional optionals literalExpression genAttrs;
 
   inherit (pkgs.callPackage ./lib.nix { }) splitPath dirListToPath
-    concatPaths sanitizeName duplicates coercedToDir coercedToFile;
+    concatPaths sanitizeName duplicates coercedToDir coercedToFile
+    toposortDirs extractPersistentStoragePaths;
 
   cfg = config.environment.persistence;
   users = config.users.users;
-  allPersistentStoragePaths = { directories = [ ]; files = [ ]; users = [ ]; }
-    // (zipAttrsWith (_name: flatten) (attrValues cfg));
+  allPersistentStoragePaths = extractPersistentStoragePaths cfg;
   inherit (allPersistentStoragePaths) files directories;
   mountFile = pkgs.runCommand "impermanence-mount-file" { buildInputs = [ pkgs.bash ]; } ''
     cp ${./mount-file.bash} $out
@@ -34,6 +34,29 @@ let
   # Create all fileSystems bind mount entries for a specific
   # persistent storage path.
   bindMounts = listToAttrs (map mkBindMountNameValuePair directories);
+
+  # Topologically sort the directories we need to create, chown, chmod, etc.
+  # The idea is to handle more "fundamental" directories (fewer "/" elements)
+  # first, and also to prefer explicitly-defined directories over
+  # implicitly-defined ones (<- created as parent directories of
+  # explicitly-specified files).
+  sortedDirs =
+    let
+      fileDirectories =
+        let
+          fileDirectory = f:
+            let
+              dirAttrs = genAttrs [ "relpath" "source" "destination" ] (a: dirOf f.${a});
+            in
+            {
+              inherit (f) persistentStoragePath root;
+              directory = dirOf f.file;
+              implicit = true;
+            } // dirAttrs // f.parentDirectory;
+        in
+        unique (map fileDirectory files);
+    in
+    toposortDirs (directories ++ fileDirectories);
 in
 {
   options = {
@@ -462,24 +485,10 @@ in
         # Build an activation script which creates all persistent
         # storage directories we want to bind mount.
         dirCreationScript =
-          let
-            inherit directories;
-            fileDirectories = let
-              fileDirectory = f:
-                let
-                  dirAttrs = genAttrs [ "relpath" "source" "destination" ] (a: dirOf f.${a});
-                in
-                {
-                  directory = dirOf f.file;
-                  inherit (f) persistentStoragePath;
-                } // dirAttrs // f.parentDirectory;
-            in
-            unique (map fileDirectory files);
-          in
           pkgs.writeShellScript "impermanence-run-create-directories" ''
             _status=0
             trap "_status=1" ERR
-            ${concatMapStrings mkDirWithPerms (directories ++ fileDirectories)}
+            ${concatMapStrings mkDirWithPerms sortedDirs.result}
             exit $_status
           '';
 
@@ -597,6 +606,24 @@ in
                   The following directories were specified two or more
                   times:
                     ${concatStringsSep "\n      " offenders}
+            '';
+        }
+        {
+          assertion = !(sortedDirs ? cycle);
+          message =
+            let
+              showChain = sep: concatMapStringsSep sep (dir: "'${dir.source}:${dir.destination}'");
+            in
+            ''
+              environment.persistence:
+                  Unable to topologically sort persistent storage source and destination directories (directories shown below as '<source>:<destination>'):
+
+                  Persistent storage directory dependency path ${showChain " -> " sortedDirs.cycle} loops to ${showChain ", " sortedDirs.loops}.
+
+                  This can happen when the source path of one directory is a prefix of the source path of a second, and the destination path of the second directory is a prefix of the destination path of the first.
+                  For instance: '[ { directory = "abc"; root = "/abc/def"; } { directory = "abc/def"; } ]'.
+
+                  Issues like these prevent the 'environment.persistence' module from creating source and destination directories and setting their permissions in a stable and consistent order.
             '';
         }
       ];

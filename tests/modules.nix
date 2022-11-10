@@ -6,7 +6,7 @@ let
   inherit (nixpkgs.lib) any escapeShellArg nixosSystem runTests toList;
 
   inherit (pkgs.callPackage ../lib.nix { }) cleanPath splitPath dirListToPath
-    concatPaths;
+    concatPaths extractPersistentStoragePaths toposortDirs;
 
   mkSystem = config: nixosSystem {
     inherit system;
@@ -47,6 +47,7 @@ let
 
   duplicateDirPattern = "The following directories were specified two or more[^a-z]*times";
   duplicateFilePattern = "The following files were specified two or more[^a-z]*times";
+  toposortErrorPattern = "Unable to topologically sort persistent storage source and destination directories";
 
   # XXX remember that `runTests` only runs test cases when they are associated
   # with an attribute name that starts with `test`!
@@ -85,6 +86,7 @@ let
       let
         patterns = [
           duplicateFilePattern
+          toposortErrorPattern
         ];
       in
       checkAssertionsDoNotMatch patterns {
@@ -105,6 +107,44 @@ let
         "/abc".users.auser.files = [ "/a/file" ];
       };
     };
+
+    testNoSpuriousSourcePrefixDetection =
+      let
+        result = mkSystem {
+          environment.persistence = {
+            "/1".directories = [ "/abc/def/ghi" ];
+            "/12".directories = [ "/abc/def" ];
+            "/123".directories = [ "/abc" ];
+          };
+        };
+
+        paths = extractPersistentStoragePaths result.config.environment.persistence;
+
+        sortedDirs = toposortDirs paths.directories;
+      in
+      {
+        expected = [ "/123" "/12" "/1" ];
+        expr = map (dir: dir.persistentStoragePath) sortedDirs.result;
+      };
+
+    testNoSpuriousDestinationPrefixDetection =
+      let
+        result = mkSystem {
+          environment.persistence = {
+            "/abc/def/ghi".directories = [ "/1" ];
+            "/abc/def".directories = [ "/12" ];
+            "/abc".directories = [ "/123" ];
+          };
+        };
+
+        paths = extractPersistentStoragePaths result.config.environment.persistence;
+
+        sortedDirs = toposortDirs paths.directories;
+      in
+      {
+        expected = [ "/abc" "/abc/def" "/abc/def/ghi" ];
+        expr = map (dir: dir.persistentStoragePath) sortedDirs.result;
+      };
 
     testNoPathTraversalAllowed = checkEvalError (cleanPath "../foo/bar");
 
