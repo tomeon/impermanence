@@ -101,11 +101,11 @@ createDirs() {
     # iterate over each part of the target path, e.g. var, lib, iwd
     previousPath="/"
 
-    OLD_IFS=$IFS
-    IFS=/ # split the path on /
-    for pathPart in $target; do
-        IFS=$OLD_IFS
+    # split the path on /
+    local -a pathParts
+    mapfile -d / -t pathParts < <(printf "%s" "$target")
 
+    for pathPart in "${pathParts[@]}"; do
         # skip empty parts caused by the prefix slash and multiple
         # consecutive slashes
         [[ "$pathPart" == "" ]] && continue
